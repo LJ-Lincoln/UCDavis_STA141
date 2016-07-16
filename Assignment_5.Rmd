@@ -1,0 +1,636 @@
+---
+title: "STA141 Assignment V"
+author: "Weitong(Jessie) Lin"
+date: "November 23, 2015"
+output: pdf_document
+---
+
+# pre-load dataset
+
+```{r}
+# load the package
+library(RSQLite)
+# connect to the imdb database
+imdb = dbConnect(SQLite(), '~/Desktop/lean_imdbpy.db')
+# list all tables
+dbListTables(imdb)
+```
+
+For this assignment, I choose to use 8.48 gigabyte dataset to do the 1-9 questions. The results above are the table names under this database. Before starting to answer the questions, I first try to explore this data set in UNIX Shell. 
+
+First, I connect to this database 'lean_imdbpy'
+```sql
+sqlite3 Desktop/lean_imdbpy.db
+```
+Then I see the structure of this database and their corresponding primary key.
+```sql
+.schema
+```
+
+After looking around this database, I have a general idea abou the structure of it. Now let's answer each quastion.
+
+# 1. How many actors are there in the database? How many movies?
+
+- **How many actors**
+
+When talking about "actor", I first try to look at all possible tables which are related to names of entertainment industry staffs. For this question, I think the tables *cast_info*, *name* and *role_type* can be linked together by their relative primary keys to get a lot of information of actors.
+
+Before looking at *role_type* table, I thought that all staffs list in *name* and *cast_info* are about actors. However, let's see the *role_type* table:
+```{r}
+dbGetQuery(imdb,"SELECT * FROM role_type;")
+```
+
+Not only actors include in this database, but also the all possible occupations in this industry are covered.
+
+Thus, we can see how many distinct *person_id* for *role_type* are 'actor' and 'actress'exists. For the consideration of time-consuming, I only use *cast_info* and *role_type* to get the answer in this question.
+
+```{r}
+#########
+# Here we join theses two tables: 
+#     cast_info.role_id & role_type.id
+#########
+
+actor_num = dbGetQuery(imdb, 'SELECT COUNT(DISTINCT person_id)
+                             FROM cast_info, role_type 
+                             WHERE role_id = role_type.id 
+                             AND role IN ("actor", "actress");')
+actor_num
+```
+
+Here we can see that there are 3492018 actors in the database. 
+
+- **How many movies**
+
+First, I look at what type we have:
+```{r}
+dbGetQuery(imdb,"SELECT * FROM kind_type;")
+```
+
+Here we can see that there are 7 types. Since we want to know how many movies in the database, I will only choose 'movie', 'tv movie' and 'video movie' as the movies. 
+
+```{r}
+#########
+# Here we join these two tables: 
+#     title.kind_id & kind_type.id.
+# title.id is the identity for each record
+# we choose only the type which has string 'movie' in it.
+#########
+dbGetQuery(imdb,"SELECT COUNT(title.id) 
+           FROM title, kind_type
+           WHERE kind_id = kind_type.id
+           AND kind LIKE '%movie%';")
+```
+There are 1145814 movies in the database.
+
+# 2. What time period does the database cover?
+
+```{r}
+#########
+# We see the minimum and maximum year for all productions
+#########
+dbGetQuery(imdb,"SELECT MIN(production_year), MAX(production_year) FROM title;")
+```
+
+The time period covers in this database is from 1874 to 2025. This time period makes me thinking that whether it's typo or not for those year is larger than 2015. Thus, I will take *year = 2025* as an example:
+
+```{r}
+dbGetQuery(imdb,"SELECT title FROM title WHERE production_year = 2025;")
+```
+
+We can see that the movie whose production year is 2025, called *StreetDance 4*, will be indeed produced in 2025. Thus, this database may contain all productions which have already announced that they will be shot in the future. So this time period is reliable.
+
+# 3. What proportion of the actors are female, male?
+
+I found that there are two variables which are related to gender: *role_type.role* and *name.gender*. I'm not sure which one I should choose to identify the gender for actors. Thus, I will see whether there are some actors having diffenent identification result from these two variables.
+
+```{r}
+# define actor type
+actor_type = c("actor", "actress")
+# define gender type
+gender = c("f", "m")
+
+#########
+# Here we join theses three tables: 
+#     cast_info.person_id & name.id, 
+#     cast_info.role_id & role_type.id
+# use sprintf function to get sql commands that we want
+#########
+sql_sen = sprintf("SELECT COUNT(DISTINCT person_id)
+          FROM cast_info, name, role_type 
+          WHERE person_id = name.id  
+          AND role_id = role_type.id 
+          AND role = '%s'
+          AND gender = '%s';", actor_type, gender)
+
+# apply each sql command
+diff_identity = sapply(sql_sen, function(sql_sen){
+  
+    # apply each sql command:
+    #   - number of people: "actor" & "f"
+    #   - number of people: "actress" & "m"
+  
+  dbGetQuery(imdb, sql_sen)
+})
+# name the list
+names(diff_identity) = c('actor_f', 'actress_m')
+diff_identity
+```
+
+Then we can see that there is a people whose gender is "male" but it's also an "actress". This situation is abnormal. Let's see who is this people:
+
+```{r}
+dbGetQuery(imdb, 'SELECT DISTINCT title, name, gender, role, person_id
+           FROM cast_info, name, role_type, title
+           WHERE cast_info.person_id = name.id  
+           AND cast_info.role_id = role_type.id 
+           AND cast_info.movie_id = title.id
+           AND role = "actress"
+           AND gender = "m";')
+```
+
+From the result, we can see that this *Chirs Edwards* gets *male* and *actress* problem.
+
+```{r}
+dbGetQuery(imdb, 'SELECT DISTINCT title, name, gender, role, kind
+           FROM cast_info, name, role_type, title, kind_type
+           WHERE cast_info.person_id = name.id  
+           AND cast_info.role_id = role_type.id 
+           AND cast_info.movie_id = title.id
+           AND title.kind_id = kind_type.id
+           AND person_id = 568592;')
+```
+
+I search this person on Google then I find that all these 8 TV episodes belong to an animation called *Animeme*. Thus, I believe that *Chirs Edwards* is a voice cast who can dub for either male or female. Thus, *Chirs Edwards* is indeed a *male*, but has been either an *'actor'* or *'actress'* as a voice cast for an animated character. 
+
+Now I know that we had better not use *role_type.role* to define the gender identiciation for an actor.  *name.gender* is a better choice.
+
+```{r}
+# define gender type
+gender = c("f", "m")
+
+#########
+# Here we join theses three tables: 
+#     cast_info.person_id & name.id, 
+#     cast_info.role_id & role_type.id
+# use sprintf function to get sql commands that we want
+#########
+sql_sen1 = sprintf("SELECT COUNT(DISTINCT person_id)
+          FROM cast_info, name, role_type 
+          WHERE person_id = name.id  
+          AND role_id = role_type.id 
+          AND role IN ('actor', 'actress')
+          AND gender = '%s';", gender)
+
+# apply each sql command
+gender_num = sapply(sql_sen1, function(sql_sen){
+  
+    # apply each sql command:
+    #   - number of people: "f"
+    #   - number of people: "m"
+  
+  dbGetQuery(imdb, sql_sen)
+})
+
+# name the list
+names(gender_num) = c('female', 'male')
+gender_num
+
+# Proportion 
+unlist(gender_num)/unlist(actor_num)
+```
+
+Here we can see that the proportion of the actors are female is 35.37%, male is 64.63%.
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{c|c|c}
+\hline
+gender & female  & male    \\ \hline
+prop   & 35.37\% & 64.63\% \\ \hline
+\end{tabular}
+\end{table}
+
+# 4. What proportion of the entries in the movies table are actual movies and what proportion are television series, etc.?
+
+From Q1.2 we already know that there are 7 types. So we can directly count how many movies ar there for each kind_type:
+
+```{r}
+#########
+# Here we join these two tables: 
+#     title.kind_id & kind_type.id.
+# title.id is the identity for each record
+# we count the number of works for each kind
+#########
+num_kind = dbGetQuery(imdb,"SELECT kind, COUNT(title.id) 
+                            FROM title, kind_type
+                            WHERE kind_id = kind_type.id
+                            GROUP BY kind;")
+colnames(num_kind) = c("kind_type", "count")
+
+# calculate the proportion
+prop_kind = num_kind
+prop_kind[,2] = num_kind[,2]/sum(num_kind[,2])
+# sort by the decreasing order
+prop_kind = prop_kind[order(prop_kind[,2], decreasing = TRUE),]
+prop_kind
+```
+
+
+Here is a table to show the propotion of each kind type:
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{c|c|c|c|c|c|c}
+\hline
+kind type & episode & movie   & video movie & tv series & tv movie & video game \\ \hline
+prop      & 63.56\% & 24.91\% & 4.16\%      & 3.53\%    & 3.41\%   & 0.43\%     \\ \hline
+\end{tabular}
+\end{table}
+
+# 5. How many genres are there? What are their names/descriptions?
+
+For this question I will first restrict the denfinition of movie is 'movie', 'tv movie' and 'video movie' first. Then I use *movie_info* and *info_type* these two tables to find genres. 
+
+```{r}
+#########
+# Here we join these two tables: 
+#      movie_info & info_type
+# movie_info.info is the genre types when info_type.info  = "genres"
+#########
+
+# count how many genres
+genres = dbGetQuery(imdb, "SELECT COUNT(DISTINCT movie_info.info)
+                           FROM movie_info, info_type, title, kind_type
+                           WHERE info_type_id = info_type.id
+                           AND title.id = movie_info.movie_id
+                           AND title.kind_id = kind_type.id
+                           AND info_type.info  = 'genres'
+                           AND kind LIKE '%movie%';")
+
+# show their names
+genres = dbGetQuery(imdb, "SELECT DISTINCT movie_info.info
+                           FROM movie_info, info_type, title, kind_type
+                           WHERE info_type_id = info_type.id
+                           AND title.id = movie_info.movie_id
+                           AND title.kind_id = kind_type.id
+                           AND info_type.info  = 'genres'
+                           AND kind LIKE '%movie%';")
+genres
+```
+
+From the result, we can see that there are 31 genre types for this movie database. All names of genres are listed above. 
+
+# 6. List the 10 most common genres of movies, showing the number of movies in each of these genres.
+
+In this question, I will consider the *movies* as what I've defined in the Q1.2, which contains 'movie', 'tv movie' and 'video movie'. Also, I will exact the number of movies for each genre from *movie_info* under *info_type* = 'genre':
+
+```{r}
+#########
+# Here we join these four tables: 
+#      movie_info, info_type, title, kind_type
+# How I link them:
+#      - movie_info.info is the genre types when info_type.info  = "genres"
+#      - the link between title & kind_type can filter the only "movie" part
+#      - the above two parts can be linked by title & movie_info
+# count the number of movie for each genre and them sort them in descreasing order
+# only show the top ten
+#########
+
+top10_genre = dbGetQuery(imdb, "SELECT movie_info.info, COUNT(title.id)
+                               FROM movie_info, info_type, title, kind_type
+                               WHERE info_type_id = info_type.id
+                               AND title.id = movie_info.movie_id
+                               AND title.kind_id = kind_type.id
+                               AND info_type.info  = 'genres'
+                               AND kind LIKE '%movie%'
+                               GROUP BY movie_info.info
+                               ORDER BY COUNT(title.id) DESC
+                               LIMIT 10;")
+
+colnames(top10_genre) = c('genre', 'num_movie')
+top10_genre
+```
+
+Here we can see that movies with 'short', 'drama' and 'comedy' have the top 3 amount. And all other genres in top 10 are listed above.
+
+# 7. Find all movies with the keyword 'space'. How many are there? What are the years these were released? and who were the top 5 actors in each of these movies?
+
+Again, I will consider the *movies* as what I've defined in the Q1.2, which contains 'movie', 'tv movie' and 'video movie'.
+
+- **How many are there?**
+
+In this question we need to link the *movie_keyword* and *keyword* table to find the keyword **space**:
+
+```{r}
+#########
+# Here we join these four tables: 
+#      title, kind_type, movie_keyword, keyword
+# How I link them:
+#      - movie_keyword & keyword can be linked by the id
+#      - the link between title & kind_type can filter the only "%movie%" part
+#      - the above two parts can be linked by title & movie_keyword
+# count the number of movie with keyword 'space'
+#########
+
+dbGetQuery(imdb,"SELECT COUNT(title.id)
+                 FROM title, kind_type, movie_keyword, keyword 
+                 WHERE title.id = movie_keyword.movie_id
+                 AND movie_keyword.keyword_id = keyword.id
+                 AND title.kind_id = kind_type.id
+                 AND kind LIKE '%movie%'
+                 AND keyword LIKE 'space';")
+```
+
+Here we can see that there are 534 movies which have the keyword 'space'.
+
+- **The years they release**
+
+```{r}
+#########
+# Here we join these four tables: 
+#      title, kind_type, movie_keyword, keyword
+# How I link them:
+#      - movie_keyword & keyword can be linked by the id
+#      - the link between title & kind_type can filter the only "%movie%" part
+#      - the above two parts can be linked by title & movie_keyword
+# find the distinct year
+# sort by year with a decreasing order
+#########
+years_movie = dbGetQuery(imdb,"SELECT DISTINCT production_year
+                               FROM title, kind_type, movie_keyword, keyword 
+                               WHERE title.id = movie_keyword.movie_id
+                               AND movie_keyword.keyword_id = keyword.id
+                               AND title.kind_id = kind_type.id
+                               AND kind LIKE '%movie%'
+                               AND keyword LIKE 'space'
+                               ORDER BY production_year DESC;")
+```
+
+From the result(since it's too long, I won't show it now), we find **NA** in our year. The reason is that some of movies has already settles the film crew but still not sure when this film will be released. Thus I will remove NA.
+
+```{r}
+# remove NA
+years_movie[!is.na(years_movie)]
+```
+
+Here we can see that the space-related idea has already been introduced to moives since 1911. After 1946, which is exactly the year that the first photo from space was taken from a V-2 launched by US scientists [https://en.wikipedia.org/wiki/Space_exploration], space-related movies were almost released every year because people may be more curious about this mysterious space than before. Also, there are also some space-related movies will be released from 2016 to 2018. 
+
+- **top 5 actors in each of these movies**
+
+*cast_info.nr_order* means the billing position, which means get the top paid in each movie. So here I will set *cast_info.nr_order* between 1 and 5 to subset the top 5 biling positions. 
+
+```{r}
+#########
+# Here we join these seven tables: 
+#      title, kind_type, movie_keyword, keyword
+# How I link them:
+#      - movie_keyword & keyword can be linked by the id
+#      - the link between title & kind_type can filter the only "%movie%" part
+#      - cast_info, name, role_type are linked. Here we can choose "actors"
+#      - the above three parts can be linked by title & movie_keyword, title & cast_info
+# sort by title, we can see the top 5 actor for each movie
+#########
+
+top_5_each = dbGetQuery(imdb,"SELECT DISTINCT name, nr_order, title
+                 FROM title, kind_type, movie_keyword, keyword, cast_info, name, role_type
+                        WHERE title.id = movie_keyword.movie_id
+                        AND movie_keyword.keyword_id = keyword.id
+                        AND title.kind_id = kind_type.id
+                        AND cast_info.person_id = name.id
+                        AND cast_info.movie_id = title.id
+                        AND role_id = role_type.id 
+                        AND role IN ('actor', 'actress') 
+                        AND kind LIKE '%movie%'
+                        AND keyword LIKE 'space'
+                        AND cast_info.nr_order BETWEEN 1 AND 5
+                        ORDER BY title, nr_order;")
+```
+
+Since there are too many results which is hard to put all of them in my reports, I will show three movies *Interstellar*, *Guardians of the Galaxy*, *Avatar* that I love most and show their top 5 billing position actors.
+
+```{r}
+# the movies I love
+movie_name = c("Interstellar", "Guardians of the Galaxy", "Avatar")
+
+example_movie = lapply(movie_name, function(movie) {
+  
+    # INPUT: 
+    #   - no value: insert "NA"
+
+  
+  top_5_each[top_5_each$title == movie, ]
+  
+})
+names(example_movie) = movie_name
+
+example_movie
+```
+
+From the above result, we can see the top 5 actors for my favourite movies.
+
+# 8. Has the number of movies in each genre changed over time? Plot the overall number of movies in each year over time, and for each genre.
+
+Now let get the number of movies for each genre over years. From the previous question, we know that some unfinished movies haven't decide the releasing year, which are marked as "NA" in *production_year*. I will remove them.
+
+```{r}
+#########
+# Here we join these four tables: 
+#      movie_info, info_type, title, kind_type
+# How I link them:
+#      - the link between title & kind_type can filter the only "%movie%" part
+#      - - movie_info.info is the genre types when info_type.info  = "genres"
+#      - the above two parts can be linked by title & movie_info
+# group table by genre and year
+#########
+
+genre_year_num = dbGetQuery(imdb,'SELECT movie_info.info, production_year, 
+                                         COUNT(DISTINCT title.id) 
+                            FROM movie_info, info_type, title, kind_type
+                            WHERE info_type_id = info_type.id
+                            AND title.id = movie_info.movie_id
+                            AND title.kind_id = kind_type.id
+                            AND info_type.info  = "genres"
+                            AND kind LIKE "%movie%"
+                            GROUP BY movie_info.info, production_year;')
+# name the list
+names(genre_year_num) = c('genre', 'year', 'num_movie')
+
+# remove 'NA' year
+genre_year_num_no = genre_year_num[!is.na(genre_year_num$year),]
+
+# show sample result
+head(genre_year_num_no)
+```
+
+Now I will classify this 31 genres into 8 blocks by their similarity:
+
+
+
+
+**From question 9 to 12, I will use the new dataset *lean_imdbpy_2010_idx.db* because of time-consuming.Also, I will consider the *movies* as what I've defined in the Q1.2, which contains 'movie', 'tv movie' and 'video movie'.** 
+
+# 9. Who are the actors that have been in the most movies? List the top 20.
+
+- **load the new dataset**
+```{r}
+imdb2 = dbConnect(SQLite(), '~/Desktop/lean_imdbpy_2010_idx.db')
+# list all tables
+dbListTables(imdb2)
+```
+
+- **SQL part**
+
+Under the *movies actors* condition, I will count the distinct movie (which can be seen by *movie_id*) for each person. Since people may have the same name, *person_id* would be a better choice since it's unique for everyone. 
+
+```{r}
+#########
+# Here we join these five tables: 
+#     name2, cast_info2, title2, role_type, kind_type
+# How they link
+#     - name2, cast_info2 and role_type can be linked to get actor info
+#     - title2 & kind_type to get the movies type
+#     - above two parts can be linked by cast_info2 & title2
+# get the name and the number of movie
+#########
+actor_movie_sql = dbGetQuery(imdb2, 'SELECT person_id, name, 
+                   COUNT(DISTINCT cast_info2.movie_id) AS num_movie
+                   FROM name2, cast_info2, title2, role_type, kind_type 
+                   WHERE role_id = role_type.id 
+                   AND cast_info2.movie_id = title2.id 
+                   AND cast_info2.person_id = name2.id
+                   AND title2.kind_id = kind_type.id
+                   AND role IN ("actor", "actress") 
+                   AND kind LIKE "%movie%"
+                   GROUP BY person_id 
+                   ORDER BY num_movie DESC 
+                   LIMIT 20;')
+actor_movie_sql 
+```
+
+From the result above, we can see that **Roberts, Eric** has the most movies which is 207 after 2010.
+
+- **R part**
+
+First I read some table which might be useful later on:
+
+```{r}
+name2 = dbReadTable(imdb2,'name2')
+cast_info2 = dbReadTable(imdb2,'cast_info2')
+title2 = dbReadTable(imdb2,'title2')
+role_type = dbReadTable(imdb2,'role_type')
+kind_type = dbReadTable(imdb2,'kind_type')
+```
+
+Since we can not joint table in R, let's see what the corresponding id are for *role_type* and *kind_type*, which can be used in *cast_info2* and *title2*
+
+```{r}
+# role_type for cast_info2
+actor_id = role_type[role_type$role == c("actor", "actress"),'id']
+# kind_type for title2
+type_id = kind_type[kind_type$kind %in% c("movie", "tv movie", "video movie"),'id']
+```
+
+Thus, for what we interest at, we can subset the *cast_info2* and *title2* tables:
+```{r}
+# subset cast_info2
+cast_info2_actor = cast_info2[cast_info2$role_id %in% actor_id, ]
+# sunset title2
+title2_type = title2[title2$kind_id %in% type_id, ]
+```
+
+Although we use R to get the result, the basic idea is very similar to SQL. We should find their inner connection and then subset the dataset. 
+```{r}
+# create a link between cast_info2_actor and title2_type
+movie_link = cast_info2_actor$movie_id %in% title2_type$id
+# only leave the 'person_id','movie_id' for what we have subseted
+actor_movie = cast_info2_actor[movie_link, c('person_id','movie_id')]
+# remove the duplicated record
+actor_movie = unique(actor_movie)
+# count the number of movies for each person
+num_movie  = as.data.frame(table(actor_movie$person_id))
+# set the colnames
+colnames(num_movie) = c('person_id','num_movie')
+
+
+# create a link between name2 and num_movie
+name_link = name2$id %in% num_movie$person_id
+# now get the name of actor by the same 'person_id'
+name_actor = name2[name_link, c('id','name')]
+# set the colnames
+colnames(name_actor) = c('person_id','name')
+
+
+# now merge the above two table with the same column 'person_id'
+actor_movie_r = merge(name_actor, num_movie)
+# order the new table with num_movie in decreasing order
+actor_movie_r = actor_movie_r[order(actor_movie_r[,3], decreasing = TRUE), ]
+# only show the top 20
+top20_actor_movie_r = head(actor_movie_r,20)
+top20_actor_movie_r 
+```
+
+Now let's check whether we have the same result from R and SQL:
+```{r}
+# remove the rowname, which is not improtant and may cause something wrong
+rownames(actor_movie_sql) = NULL
+rownames(top20_actor_movie_r) = NULL
+# test whether these two are the same
+all.equal(actor_movie_sql, top20_actor_movie_r)
+```
+
+
+From the above result, we can see that SQL and R get the same result, that **Roberts, Eric** has the most movies which is 207 after 2010.
+
+
+
+
+
+# 11. Who are the 10 actors that performed in the most movies within any given year? What are their names, the year they starred in these movies and the names of the movies?
+
+- **SQL part**
+
+This question is quite like question 9. It's like the each-year-version Q9.
+
+Under the *movies actors* condition, I will count the distinct movie (which can be seen by *movie_id*) for each person for each year. Since people may have the same name, *person_id* would be a better choice since it's unique for everyone. 
+
+```{r}
+# define distinct year from the data set
+years = dbGetQuery(imdb2, 'SELECT DISTINCT production_year FROM title2')
+all_years = unlist(years)
+
+#########
+# Here we join these five tables: 
+#     name2, cast_info2, title2, role_type, kind_type
+# How they link
+#     - name2, cast_info2 and role_type can be linked to get actor info
+#     - title2 & kind_type to get the movies type
+#     - above two parts can be linked by cast_info2 & title2
+# get the name and the number of movie
+#########
+sql_lan4 = sprintf('SELECT person_id, name, production_year,
+                   COUNT(DISTINCT cast_info2.movie_id) AS num_movie
+                   FROM name2, cast_info2, title2, role_type, kind_type 
+                   WHERE role_id = role_type.id 
+                   AND cast_info2.movie_id = title2.id 
+                   AND cast_info2.person_id = name2.id
+                   AND title2.kind_id = kind_type.id
+                   AND role IN ("actor", "actress") 
+                   AND kind LIKE "%%movie%%"
+                   AND production_year IN (%s)
+                   GROUP BY person_id 
+                   ORDER BY num_movie DESC 
+                   LIMIT 10;', all_years)
+
+# apply each sql command
+year_result = sapply(sql_lan4, function(sql_sen){
+  
+    # apply each sql command:
+    #   - record for each year
+  
+  dbGetQuery(imdb2, sql_sen)
+})
+
+# name the list
+names(gender_num) = c('female', 'male')
+gender_num
+```

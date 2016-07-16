@@ -1,0 +1,339 @@
+---
+title: "STA141 Assignment 1 II"
+author: "Weitong(Jessie) Lin"
+date: "October 8, 2015"
+output: word_document
+---
+
+## Download the dataset *vehicles.rda* from website
+
+```{r}
+setwd('~/Desktop/UC Davis/141/STA141 Assignment 1 II')
+#download.file('http://eeyore.ucdavis.edu/stat141/Data/vehicles.rda',destfile="vehicles.rda")
+print(load("vehicles.rda"))
+```
+
+
+## 1. find at least 3 types of anomalies in the data. Provide succinct justification for identifying them as anomalies. Then correct the corresponding observations appropriately, again providing justification. What impact does this have on analyzing the data?
+
+## What's wrong with "year"?
+
+Now let's see the "year"
+
+```{r}
+sort(unique(vposts$year))
+```
+I find that there are "4", "1900",2016", "2022"years existing in the data which is not reasonable.
+
+
+- **"4" year**:
+```{r}
+vposts[which(vposts$year == 4),]
+vposts[which(vposts$year == 4),]$year=2004
+```
+After watching the "title" for this car, which shows"eni-04 JEeP wraNgler Clean lEATHeR", I change the year"4" into "2004"
+
+- **"1900" year**:
+```{r}
+vposts[which(vposts$year == 1900),]
+```
+When I look at these records, I find that it's "we will buy the cars which won't pass smog test". This is not about selling cars. 1900 is not the car year. So I remove these data.
+```{r}
+# remove data
+vposts = vposts[-which(vposts$year == 1900),]
+```
+
+- **"2022" year**:
+```{r }
+vposts[which(vposts$year == 2022),]
+vposts[which(vposts$year == 2022),]$year=2012
+```
+After watching the detail, I find the "odometer" for this car is a little bit large considering it's a Japaness car, so "2002" is more reasonable.    
+
+- **"2016" year**:
+```{r}
+length(which(vposts$year == 2016))
+```
+There are 206 records show that the year is 2016. We can not see their details one by one which may spend too much time. 
+So we will use grepl to extract information from "title","body" and "description"
+```{r}
+# search whether it's around 20xx year which shows in "body"
+Year2016 = which(!is.na(vposts$year) & vposts$year == 2016)
+grab_Year2016 = grepl("20[0-9][0-9]", vposts$body[Year2016])
+vposts$year[Year2016[grab_Year2016]] = as.integer(gsub(".*(20[0-9][0-9]).*", "\\1", vposts$body[Year2016[grab_Year2016]]))
+# search whether it's around 20xx year which shows in "title"
+Year2016 = which(!is.na(vposts$year) & vposts$year == 2016)
+grab_Year2016 = grepl("20[0-9][0-9]", vposts$title[Year2016])
+vposts$year[Year2016[grab_Year2016]] = as.integer(gsub(".*(20[0-9][0-9]).*", "\\1",vposts$title[Year2016[grab_Year2016]]))
+# search whether it's around 20xx year which shows in "description"
+Year2016 = which(!is.na(vposts$year) & vposts$year == 2016)
+grab_Year2016 = grepl("20[0-9][0-9]", vposts$description[Year2016])
+vposts$year[Year2016[grab_Year2016]] = as.integer(gsub(".*(20[0-9][0-9]).*", "\\1",vposts$description[Year2016[grab_Year2016]]))
+# search whether it's around 19xx year which shows in "body"
+Year2016 = which(!is.na(vposts$year) & vposts$year == 2016)
+grab_Year2016 = grepl("19[0-9][0-9]", vposts$body[Year2016])
+vposts$year[Year2016[grab_Year2016]] = as.integer(gsub(".*(19[0-9][0-9]).*", "\\1", vposts$body[Year2016[grab_Year2016]]))
+# search whether it's around 19xx year which shows in "title"
+Year2016 = which(!is.na(vposts$year) & vposts$year == 2016)
+grab_Year2016 = grepl("19[0-9][0-9]", vposts$title[Year2016])
+vposts$year[Year2016[grab_Year2016]] = as.integer(gsub(".*(19[0-9][0-9]).*", "\\1",vposts$title[Year2016[grab_Year2016]]))
+# search whether it's around 19xx year which shows in "description"
+Year2016 = which(!is.na(vposts$year) & vposts$year == 2016)
+grab_Year2016 = grepl("19[0-9][0-9]", vposts$description[Year2016])
+vposts$year[Year2016[grab_Year2016]] = as.integer(gsub(".*(19[0-9][0-9]).*", "\\1", vposts$description[Year2016[grab_Year2016]]))
+```
+
+```{r}
+length(which(vposts$year == 2016))
+```
+However, some records still can not find any information from other variables, so I remove these points.
+```{r}
+vposts=vposts[-which(vposts$year == 2016),]
+```
+To avoid some wrong message that we get from the detail, I remove those wrong data which caused by "grepl"
+```{r}
+vposts=subset(vposts, vposts$year <2016)
+```
+This year can really cause some misunderstanding to users. When a user want to search cars with an age limit, this would cause users to miss a lot of cars.
+
+## Outliers in "Price"   
+
+First, let's take a summary of "price" in data set.
+```{r}
+summary(vposts$price)
+```
+
+From the result, I found that there are some "NA"s existing. So I remove all the dataset where the 'price' is "NA":
+```{r}
+Price_data=with(vposts,subset(vposts,!is.na(price)))
+```
+Also, we can see that the maximum price and minimum price, which are $600030000 and $1 are incredible unreasonable. So the variable "price" is a kind of anomaly that we need to correct it.    
+
+Firstly I will go through the "price"" which is large unreasonably.
+```{r}
+TopTenPrice=sort(Price_data$price,decreasing=T)[1:10]
+TopTenPrice
+```
+It seems like somethings wrong because it's too experience for a car. Also we can briefly see some hidden patterns which reveal somethings wrong.
+
+Now let's see the description for the cars which have the highest value.
+```{r}
+Price_data[which(Price_data$price==TopTenPrice[1]),]$body
+```
+From the information showed above,  we get two exactly similar data which means that there are two duplicated data. So I remove one of them.
+```{r}
+Price_data=Price_data[-(which(Price_data$price==TopTenPrice[2])[1]),]
+```
+Also, we can know that the price actually should be between $6000 and $30000, not $600030000. Thus, I take a median of the 6000 and 30000 to be as the price for this car,  which is:
+```{r}
+median(c(6000,30000))
+Price_data[which(Price_data$price==max(Price_data$price)),]$price=median(c(6000,30000))
+```
+Now let's move on to the highest value for the revised dataset, which is:
+```{r }
+max(Price_data$price)
+```
+Now let's see the description and the maker for this car:
+```{r }
+Price_data[which.max(Price_data$price),c("header","body")]
+```
+Then we search it in the Google. From the data showed in [cars.com](http://www.cars.com/cadillac/seville/2002/snapshot/), it should be around $2500 to $3000. So we take the median to assign this typo.
+
+```{r }
+median(c(2500,3000))
+Price_data[which(Price_data$price==max(Price_data$price,na.rm=T)),]$price=median(c(2500,3000))
+```
+
+Now let's move on to the next highest value for the revised dataset, which is:
+```{r }
+max(Price_data$price,na.rm=T)
+```
+
+$9999999 seems like a really typo. Now let's see the description and the maker for this car:
+```{r }
+Price_data[which.max(Price_data$price),]$header
+Price_data[which.max(Price_data$price),]$body
+```
+Owner acually said that it would be $20 obo. In my option, It's more like a joke. So, I remove the whole record of this car. 
+```{r }
+Price_data=Price_data[-(which(Price_data$price==max(Price_data$price))),]
+```
+Now let's keep moving to next two larger value. 
+```{r }
+TopTenPrice[c(5,6)]
+```
+
+
+These two cars are the same type of car. From the data showed in [cars.com](http://www.cars.com/chevrolet/impala/2009/snapshot), it should be around $9500. So I correct these two typo as $9500.
+
+```{r}
+Price_data[which(Price_data$price==TopTenPrice[5]),]$price=9500
+Price_data[which(Price_data$price==TopTenPrice[6]),]$price=9500
+```
+
+Let's move on to the highest value in the revised dataset.
+```{r }
+max(Price_data$price)
+```
+Now let's see the description and the maker for this car:
+```{r}
+Price_data[which.max(Price_data$price),c('header','maker','body')]
+```
+From the data showed in [cars.com](http://www.cars.com/ford/gt/2006/snapshot), $40000 sounds a appropriate price for a 2006 Ford GT. So I won't change this record.
+
+Now let's move to next price:
+```{r}
+Price_data[which(Price_data$price==TopTenPrice[8]), c("header", "price","body")]
+```
+For a 2010 CHEVROLET SILVERADO, I believe that there is an extra zero in the end of price. The real price should be $ 35900
+```{r}
+Price_data[which(Price_data$price==TopTenPrice[8]),]$price=35900
+```
+For the next price, 
+```{r}
+Price_data[which(Price_data$price==TopTenPrice[9]), c("header", "price","body")]
+```
+
+From the detail, we can see that people who post this car is pretty sure that he will sell a 2004 Toyota Corolla for $286863.
+Let's find the similar cars in the dataset.(The code here is inspired by Duncan's idea.)
+```{r}
+car_2004_Corolla=Price_data[ which(Price_data$year %in% c(2004)& Price_data$price > 100 &Price_data$price < 286763 & grepl(pattern = "Corolla", x = Price_data$header, ignore.case = TRUE)), c("header", "price", "maker", "year") ]
+car_2004_Corolla
+```
+Here we can find that people who sell it may overestimate this car. So let's take the average price of other "2004 TOYOTA COROLLA" and assign it as the price of this car.
+```{r}
+mean(car_2004_Corolla$price)
+Price_data[which(Price_data$price==TopTenPrice[9]),]$price=mean(car_2004_Corolla$price)
+```
+For the last top 10 price car, 
+```{r}
+Price_data[which(Price_data$price==TopTenPrice[10]), c("header", "price","body")]
+```
+This price for a ferrari is quite reasonable.
+
+Also, when we look at the data, we can find that there are a lot of cars which are sold with a price under $500. This is quite abnormal.
+
+```{r}
+dim(Price_data[Price_data$price<500,c("header", "price", "maker", "year")])[1]
+```
+There are 847 records. So I decide to remove them. 
+```{r}
+Price_data=Price_data[-which(Price_data$price<100),]
+```
+```{r}
+library(ggplot2)
+ggplot(Price_data, aes(x=Price_data$price)) +
+  geom_density(fill="red") +
+  xlab("Price") +
+  labs(title="Density plot of Price")
+```   
+
+Those extremely large and small prices (i.e. $600030000 and $1) can cause misunderstanding to users. Especially when we calculate mean of price.
+
+
+
+## Odometer
+Now Let's see odometer
+
+```{r}
+Price_data$age = 2016 - Price_data$year
+Odometer_Price_data=subset(Price_data,!is.na(Price_data$odometer))
+summary(Odometer_Price_data$odometer)
+```
+According to the official record, [The higghest-vehicle milage](http://www.guinnessworldrecords.com/world-records/highest-vehicle-mileage) is around 3100000 miles. Thus, for those cars who have odometers above 3100000 are not right, we need to correct or remove them.
+```{r}
+Odometer_Price_data=subset(Odometer_Price_data, Odometer_Price_data$odometer<3100000)
+```
+However, this is still an extreme case. Thus, let's see the quantitle for this data.
+```{r}
+quantile(x = Odometer_Price_data$odometer, probs = c(0,0.99))
+```
+99% of data are below 261915 miles. Thus, we remove those data are above 261915 miles, which may be typos.
+```{r}
+Odometer_Price_data=subset(Odometer_Price_data, Odometer_Price_data$odometer<261915)
+```
+
+```{r}
+length(which(Odometer_Price_data$odometer<1000))
+```
+Also, some odometers are very small, or we can say "smaller than 1000 miles". This situation can happen because those cars may just be bought and the sellers want to change another car. However, for those cars' ages are very large, this situation is quite rare. Thus, I will remove those cars whose odometer is smaller than 1000 miles and car age is larger than 2.
+```{r}
+# remove those cars
+Odometer_Price_data=Odometer_Price_data[-which(Odometer_Price_data$odometer < 1000 & Odometer_Price_data$age >2),]
+```
+
+Now let's draw a box plot of odometer.
+```{r}
+ggplot(Odometer_Price_data, aes(x='',y=Odometer_Price_data$odometer)) +
+  geom_boxplot(col="red") +
+  xlab("odometer") +
+  labs(title="Boxplot of odometer")
+```
+
+This anomaly would cause a big problem. Most buyers will judge the car based on their odometer. For those cars with extrmemly large and small odometer, it will mislead buyers a lot. 
+
+## 2.Find at least 3 interesting insights/characteristics/features illustrated by the data. Explain in what way these insights are interesting (to whom? why?) and provide evidence for any inference/conclusions you draw. How generalizable are these insights to other vehicle sales data?
+
+## Price vs. Age
+
+Here we can also draw a plot about price and age
+```{r}
+with(Price_data,smoothScatter(age,price,main="The relationship between price & age"))  
+abline(lm(Price_data$price~Price_data$age),col="red")
+```
+
+From the above plot, we can see that there is an approciamate trend that age and price have a negative relationship. The older the car, the lower the price. However, there is still some old car have high price.
+Let's take a such point as example.
+```{r}
+Price_data[which(Price_data$age>65 & Price_data$price > 100000),c("title", 'price','age')]
+```
+
+
+"willys  coupe 1941 blown" is a really fancy car that althought it's old, it's quite expensive.
+
+Thus, we can conclude that although the older the car, the lower the price, some fancy cars can still be found in "older car" list. This message is quite useful for those buyers who have enough money as well as want to buy fancy cars. When these kind of buyers search car online, don't limit the age in case of missing some really fancy vintage cars. I believe this insight can also apply to other vehicle sales data.
+
+## Price vs. Fuel type
+Now, there is another issue that buyers may need to decide: fuel type of car.
+```{r}
+# remove the "fuel" is NA
+Fuel_Price_data=subset(Price_data,!is.na(Price_data$fuel))
+summary(Fuel_Price_data$fuel)
+```
+Now, let's see the relationship between price and fuel type: 
+```{r}
+ggplot(Fuel_Price_data, aes(x=fuel, y=price,col=fuel))+
+geom_boxplot()+
+  labs(title="Relationship between fuel type and price")+
+   theme(axis.text.x = element_text(size = rel(0.8)),
+         plot.title = element_text(size = rel(1)))
+```
+
+According to the boxplot, we can conclude that the mean price of "gas car" is the lowest. "Diesel car" is relatively more expensive. The reason is  that the residual value of "Diesel car" is higher than gas car [see the relative link](http://www.extremetech.com/extreme/170763-auto-tech-gas-vs-diesel-vs-hybrid-which-is-best-for-you-and-the-environment).
+Also, the cost of diesel is lower than gas. Thus, in the future, diesel car will cost less than gas car in the fuel fee.  it leads American who want to buy diesel car to increase. This situation may make the price of "diesel car" rises. 
+This situation may provide buyers a insight that gas cars may cost less than other fuel-type cars. 
+
+## Size vs. price
+Let's see the relationship between size and price.
+```{r}
+Size_Price_data=subset(Price_data,!is.na(Price_data$size))
+summary(Size_Price_data$size)
+```
+There are 4 size of cars in this dataset.
+```{r}
+ggplot(Size_Price_data, aes(x=size, y=price,col=size))+
+geom_boxplot()+
+  labs(title="Relationship between size and price")+
+   theme(axis.text.x = element_text(size = rel(0.8)),
+         plot.title = element_text(size = rel(1)))
+```
+
+
+From the plot above, we can see the mean prices for different size. "Full-size car" holds the highest mean price. "sub-compcat car" holds the lowest mean price. This situation meets our common knowledge. However, we can also find that there is not too much difference for the mean price between "compact car" and "sub-compact car":
+
+```{r}
+# mean price for each size
+tapply(Size_Price_data$price,Size_Price_data$size,mean)
+```
+
+Here we can conclude that the cost for "compact car" and "sub-compact car" is quite close. If buyers have a tight budgt and want to buy a car which have enough space to carry passagers and cargos, "compact car" is a better choice than "sub-compact car". This situation may also apply to other dataset.

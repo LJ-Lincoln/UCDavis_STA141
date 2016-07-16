@@ -1,0 +1,427 @@
+---
+title: "STA141 Assignment 1 I"
+author: "Weitong(Jessie) Lin"
+output: word_document
+---
+## Download the dataset *vehicles.rda* from website
+
+```{r}
+setwd('~/Desktop/UC Davis/141/Day1')
+#download.file('http://eeyore.ucdavis.edu/stat141/Data/vehicles.rda',destfile="vehicles.rda")
+print(load("vehicles.rda"))
+library(ggplot2)
+```
+
+# Part I
+
+## 1. How many observations are there in the data set?  
+``` {r}
+str(vposts)
+```
+
+From the above output from R, we can find that there are **34667** observations in the data set.
+
+## 2. What are the names of the variables? and what is the class of each variable?  
+ From the output from the fisrt question, we can know the **name** (after $) and **class**(after :) for each variables.
+ 
+ Or,  
+ 
+- We can also get the names for variables by:
+```{r}
+names(vposts)
+```
+
+- The type for each variable by:
+```{r}
+sapply(vposts, class)
+```
+
+## 3. What is the average price of all the vehicles? the median price? and the deciles? Displays these on a plot of the distribution of vehicle prices.
+
+**I will answer the question after Question 8.**
+
+
+
+## 4. What are the different categories of vehicles, i.e. the type variable/column? What is the proportion for each category ? 
+
+- Categories of vehicles:
+```{r}
+levels(vposts$type)
+```
+
+- The proportion for each category:  
+
+We need to move the data where type=NA,
+```{r}
+Type_clean=vposts[which(vposts$type != "NA"),]
+prop_type=round(prop.table(summary(Type_clean$type)),digits=3)
+prop_type
+```      
+
+Here is a pie chart which can show the the proportion of car types visually.    
+
+```{r }
+
+count_type_table=as.data.frame(table(Type_clean$type))
+colnames(count_type_table)=c("type","counts")
+ggplot(count_type_table, aes(x="", y=count_type_table$counts, fill=type))+
+geom_bar(width = 1, stat = "identity") +
+coord_polar("y", start=0)+
+theme(axis.text.x=element_blank())+
+labs(list(title = "Pie Chart of Car Type", x = "", y = ""))
+```
+
+## 5. Display the relationship between fuel type and vehicle type. Does this depend on transmission type?
+- First, all data whose "type" and "fuel are "NA" should be removed.
+```{r}
+Fuel_Type_clean=vposts[which(vposts$type != "NA" & vposts$fuel != "NA" & vposts$transmission != "NA"),]
+```
+Now let's see the relationship between fuel type and vehicle type. In piazza, most students use mosaic plot to show their relationship. However, when I plot it, I think it's a little bit messy. So I also try the heat map, which might be more clear.
+
+
+```{r}
+Fuel_Type_clean_df = with(Fuel_Type_clean, as.data.frame(table(type, fuel)))
+ggplot(Fuel_Type_clean_df, aes(type, fuel)) +
+   geom_tile(aes(fill = Freq), colour = "black")+
+   scale_fill_gradient(low = "white", high = "black") +
+   xlab("Vehicle Type")+
+   ylab("Fuel Type")+
+   labs(title="Heat Map of Fuel Type against Vehicle Type")+
+   theme(axis.text.x = element_text(size = rel(1.2),angle=45),
+         plot.title = element_text(size = rel(1.3)))  
+```
+- Then we draw another plot to see whether the relationship depends on transmission type.
+```{r}
+Fuel_Type_trans_df = with(Fuel_Type_clean, as.data.frame(table(type, fuel,transmission)))
+ggplot(Fuel_Type_trans_df, aes(type, fuel)) +
+   geom_tile(aes(fill = Freq), colour = "black")+
+   scale_fill_gradient(low = "ghostwhite", high = "black") +
+   xlab("Vehicle Type")+
+   ylab("Fuel Type")+
+   labs(title="Heat Map of Fuel Type against Vehicle Type")+
+   theme(axis.text.x = element_text(size = rel(1),angle=45),
+         plot.title = element_text(size = rel(1.3))) +
+   facet_wrap(~transmission)
+```
+From the above plot, we can find no matter which type of transmission, the number of gas-used sedan is always a larger one.
+
+## 6. How many different cities are represented in the dataset?
+```{r}
+levels(vposts$city)
+```
+## 7. Visually display how the number/proportion of "for sale by owner" and "for sale by dealer" varies across city?
+```{r}
+for_sale_clean=subset(vposts, !is.na(byOwner) & !is.na(city))
+for_sale_clean_count=with(for_sale_clean, as.data.frame(table(byOwner, city)))
+ggplot(for_sale_clean_count, aes(x='', y=Freq, fill=byOwner))+
+geom_bar(width = 1, stat = "identity") +
+facet_wrap(~city) +
+coord_polar("y", start=0)+
+theme(axis.text.x=element_blank())+
+labs(list(title = "Pie Chart of \"for sale\" type across city", x = "", y = ""))
+```
+From the above chart, we can find that the proportion of "for sale by owner" and "for sale by dealer" across city are almost the same, which is around 50%.
+
+## 8. What is the largest price for a vehicle in this data set? Examine this and fix the value. Now examine the new highest value for price.
+First, let's find the highest price for a vehicle in data set.
+```{r}
+max(vposts$price,na.rm=T)
+```
+It is incredible large for this value that we need to figure out what really happen in this data.
+```{r}
+vposts[which.max(vposts$price),]$body
+```
+From the information showed above, we can know that the price actually should be between $6000 and $30000, not $600030000. Thus, I take a median of the 6000 and 30000 to be as the price for this car,  which is:
+```{r}
+median(c(6000,30000))
+vposts[which(vposts$price==max(vposts$price,na.rm=T)),]$price=median(c(6000,30000))
+```
+So this car is on longer with the highest price. Now let's see the top 6 largest price.
+```{r}
+TopSixPrice=head(sort(vposts$price,decreasing=T))
+TopSixPrice
+```
+Now let's move on to the highest value for the revised dataset, which is:
+```{r }
+max(vposts$price,na.rm=T)
+```
+Now let's see the description and the maker for this car:
+```{r }
+vposts[which.max(vposts$price),]$header
+```
+Then we search it in the Google. From the data showed in [cars.com](http://www.cars.com/cadillac/seville/2002/snapshot/), it should be around $2500 to $3000. So we take the median to assign this typo.
+
+```{r }
+median(c(2500,3000))
+vposts[which(vposts$price==max(vposts$price,na.rm=T)),]$price=median(c(2500,3000))
+```
+
+Now let's move on to the next highest value for the revised dataset, which is:
+```{r }
+max(vposts$price,na.rm=T)
+```
+Now let's see the description and the maker for this car:
+```{r }
+vposts[which.max(vposts$price),]$header
+vposts[which.max(vposts$price),]$body
+```
+Owner acually said that it would be $20 obo. Thus, we just fix it as $20. 
+```{r }
+vposts[which(vposts$price==max(vposts$price,na.rm=T)),]$price=20
+```
+Now let's keep moving to next two larger value. 
+```{r }
+TopSixPrice[c(3,4)]
+```
+
+
+These two cars are the same type of car. From the data showed in [cars.com](http://www.cars.com/chevrolet/impala/2009/snapshot), it should be around $9500. So I correct these two typo as $9500.
+
+```{r echo=F}
+vposts[which(vposts$price==max(vposts$price,na.rm=T)),]$price=9500
+vposts[which(vposts$price==max(vposts$price,na.rm=T)),]$price=9500
+```
+
+Let's move on to the highest value in the revised dataset.
+```{r }
+max(vposts$price,na.rm=T)
+```
+Now let's see the description and the maker for this car:
+```{r}
+vposts[which.max(vposts$price),]$header
+vposts[which.max(vposts$price),]$body
+```
+From the data showed in [cars.com](http://www.cars.com/ford/gt/2006/snapshot), $40000 sounds a appropriate price for a 2006 Ford GT.
+
+Thus, the new highest price for the revised dataset should be:
+```{r}
+options(scipen=3)
+max(vposts$price,na.rm=T)
+```
+## 3. What is the average price of all the vehicles? the median price? and the deciles? Displays these on a plot of the distribution of vehicle prices.
+
+
+```{r }
+Price=subset(vposts, ! is.na(vposts$price) & vposts$price>5000 )
+```
+
+- The #average# price of all the vehicles:
+```{r }
+mean(Price$price)
+```
+
+- The #median# price of all the vehicles:
+```{r }
+median(Price$price)
+```
+
+- The #declies# for price of all the vehicles:
+```{r }
+quantile(Price$price ,seq(0, 1, length = 11))
+```
+
+- a plot of the distribution of vehicle prices
+
+```{r }
+plot(density(Price$price),main="density plot for price")
+rug(vposts$price,col='red')
+```
+From the rug function, I will reset the limit for price.
+```{r}
+Price=subset(vposts, vposts$price>5000 & vposts$price< 100000)
+plot(density(Price$price),main="density plot for price")
+abline(v=mean(Price$price),col="red")
+abline(v=median(Price$price),col="blue")
+abline(v=quantile(Price$price ,seq(0, 1, length = 11)),col="green")
+```  
+## 9. What are the three most common makes of cars in each city for "sale by owner" and for "sale by dealer"? Are they similar or quite different?     
+
+
+
+
+```{r echo=F}
+maker_clean=subset(vposts, !is.na(byOwner) & !is.na(city) & !is.na(maker))
+maker_clean_count=with(maker_clean, as.data.frame(table(byOwner,maker,city)))
+maker_clean_count_D=subset(maker_clean_count,byOwner == F )
+rownames(maker_clean_count_D)=1:dim(maker_clean_count_D)[1]
+maker_clean_count_O=subset(maker_clean_count,byOwner == T )
+rownames(maker_clean_count_O)=1:dim(maker_clean_count_O)[1]
+```
+
+```{r }
+sortFreq1=function(Freq){
+  sort_top3=sort(Freq, decreasing = TRUE);
+  order_top3=order(Freq, decreasing = TRUE);
+  Maker=maker_clean_count_O$maker[order_top3];
+  data.frame(Maker=Maker[1:3], Top3=sort_top3[1:3])
+}
+
+For_Sale_Owner=with(maker_clean_count_O,tapply(Freq,city,sortFreq1))
+#######
+sortFreq2=function(Freq){
+  sort_top3=sort(Freq, decreasing = TRUE);
+  order_top3=order(Freq, decreasing = TRUE);
+  Maker=maker_clean_count_D$maker[order_top3];
+  data.frame(Maker=Maker[1:3], Top3=sort_top3[1:3])
+}
+
+For_Sale_Dealer=with(maker_clean_count_D,tapply(Freq,city,sortFreq2))
+#######
+Top3_Maker=mapply(function(Owner, Dealer) merge(Owner, Dealer, by = 0), Owner = For_Sale_Owner, Dealer = For_Sale_Dealer, SIMPLIFY = F)
+
+change_name=c('rownames','Maker.Owner', 'Top3.Owner','Maker.Dealer','Top3.Dealer')
+Top3_Maker=lapply(Top3_Maker,setNames, change_name)
+```
+The above result shows the three most common makes of cars in each city for "sale by owner"(left) and for "sale by dealer"(right). They are similar
+The skill that merge two lists into one list is found on [Stackoverflow](http://stackoverflow.com/questions/28568972/merge-two-lists-with-dataframes-into-one-list-with-merged-dataframes)
+
+## 10. Visually compare the distribution of the age of cars for different cities and for "sale by owner" and "sale by dealer". Provide an interpretation of the plots, i.e., what are the key conclusions and insights?   
+
+
+First let's see the "year for this data:
+```{r }
+sort(unique(vposts$year))
+```
+Then we find that there are "4", "2022" years existing in the data which is not reasonable.
+
+
+- **"4" year**:
+```{r}
+vposts[which(vposts$year == 4),]
+vposts[which(vposts$year == 4),]$year=2004
+```
+After watching the "title" for this car, I change the year"4" into "2004"
+
+- **"1900" year**:
+```{r}
+vposts[which(vposts$year == 1900),]
+```
+When I look at these records, I find that it's "we will buy the cars which won't pass smog test". This is not about selling cars. 1900 is not the car year. So I remove these data.
+```{r}
+# remove data
+vposts = vposts[-which(vposts$year == 1900),]
+```
+
+- **"2022" year**:
+```{r }
+vposts[which(vposts$year == 2022),]
+vposts[which(vposts$year == 2022),]$year=2012
+```
+After watching the detail, I find the "odometer" for this car is a little bit large considering it's a Japaness car, so "2002" is more reasonable.    
+
+Now let's draw density plots.    
+
+```{r  warning=F}
+city_byOwner_clean=subset(vposts, !is.na(byOwner) & !is.na(city) & !is.na(year))
+city_byOwner_clean$age = 2016 - city_byOwner_clean$year
+ggplot(city_byOwner_clean, aes(x=age,col=city)) +
+   geom_density() +
+   xlim(c(0,65)) +
+    facet_wrap(~byOwner) +
+  labs(title = "Age Distribution for Different Cities")
+```   
+
+In the above plot, which "Sale by Dealer" on the left and "Sale by Owner" on the right, we can find that for sale by dealer, most cars in nyc are aged around 1 to 5 years.For sale by owner, most cars in nyc are aged around 5 to 7 years. Also, some very old car can also be found when the cars are sold by owner. Comparing between different cities, nyc always has the younger cars.   
+
+# 11. Plot the locations of the posts on a map? What do you notice?
+```{r warning=F}
+map_clean=subset(vposts, !is.na(long) & !is.na(lat))
+library(ggmap)
+USAmap = get_map(location="United States", zoom = 4)
+ggmap(USAmap) +
+ geom_point(aes(x = long, y = lat), col='red', map_clean)
+```   
+
+From the map, we can see that most of the posts are located in major 4 areas. 
+
+# 12. Summarize the distribution of fuel type, drive, transmission, and vehicle type. Find a good way to display this information.
+Here are the distribution table of fuel type, drive, transmission, and vehicle type
+```{r}
+FTDV=subset(vposts,!is.na(fuel) & !is.na(drive) & !is.na(transmission) & !is.na(type))
+FTDV_count=with(FTDV, as.data.frame(table(fuel,drive,transmission,type)))
+```
+When we display this table into a plot:
+```{r}
+ggplot(FTDV_count, aes(x=type, y=Freq))+
+geom_bar(stat="identity",aes(fill = fuel), position = "dodge")+
+  facet_grid(drive ~transmission) +
+  labs(title="distribution of fuel type, drive, transmission, and vehicle type")+
+   theme(axis.text.x = element_text(size = rel(0.8),angle=45),
+         plot.title = element_text(size = rel(1.5))) 
+```
+From the plot, we can conclude that most of cars are "automatic" and "gas-used". Also, most of "4wd" is Jeep. Most of "fwd" and 'rwd' is sedan. 
+
+
+
+# 13. Plot odometer reading and age of car? Is there a relationship? Similarly, plot odometer reading and price? Interpret the result(s). Are odometer reading and age of car related?
+
+```{r echo=F}
+odometer_clean=subset(vposts, !is.na(odometer) & !is.na(price) & !is.na(year))
+odometer_clean$age = 2016 - odometer_clean$year
+```   
+I only consider the cars which odometers are between 25000 miles and 1000000 miles. 
+```{r}
+odometer_clean=subset(odometer_clean, odometer>=25000 & odometer<=1000000 & price<=200000)
+op=par(mfrow=c(1,2))
+with(odometer_clean,smoothScatter(odometer,age,main="The relationship between odometer & age"))  
+abline(lm(odometer_clean$age~odometer_clean$odometer),col="red")
+with(odometer_clean,smoothScatter(odometer,price,main="The relationship between odometer & price")) 
+abline(lm(odometer_clean$price~odometer_clean$odometer),col="red")
+par(op)
+```  
+
+From the plot, we can see an approximate trend that odometer and age are positively related. The larger the odometer, the larger the age. Also, there is an approximate trend that odometer and price are negatively related. The larger the odometer, the lower the age.
+
+# 14. Identify the "old" cars. What manufacturers made these? What is the price distribution for these?
+In my opinion, I'd like to define those cars which were manufactured before 2005 or odometer were larger than 150000 miles as "old cars". 
+```{r echo=F}
+oldcar=subset(vposts, odometer>150000 & year>=2005 & !is.na(maker) & price >500)
+```
+
+Here are the manufacturers:
+```{r}
+unique(oldcar$maker)
+```
+
+Here is the price distribution:
+```{r}
+ggplot(oldcar, aes(x=price)) +
+  geom_density(fill="yellow") +
+  labs(title = "Price Distribution for Old Cars")
+```
+
+# 15.I have omitted one important variable in this data set. What do you think it is? Can we derive this from the other variables? If so, sketch possible ideas as to how we would compute this variable.
+From the "body" part, I guess it's Engine information.
+```{r}
+table(grepl('Engine', vposts$body))
+```
+
+
+# 16. Display how condition and odometer are related. Also how condition and price are related. And condition and age of the car. Provide a brief interpretation of what you find.
+```{r echo=F}
+odometer_clean=subset(odometer_clean, condition %in% c('good','excellent','used'))
+```
+Here we only consider three conditions: 'good', 'excellent' and 'used'
+```{r}
+
+ggplot(odometer_clean, aes(x=condition, y=price,col=condition))+
+geom_boxplot()+
+  labs(title="Relationship between Condition and price")+
+   theme(axis.text.x = element_text(size = rel(0.8)),
+         plot.title = element_text(size = rel(1)))
+
+ggplot(odometer_clean, aes(x=condition, y=age,col=condition))+
+geom_boxplot()+
+  labs(title="Relationship between Condition and age")+
+   theme(axis.text.x = element_text(size = rel(0.8)),
+         plot.title = element_text(size = rel(1)))
+
+ggplot(odometer_clean, aes(x=condition, y=odometer,col=condition))+
+geom_boxplot()+
+  labs(title="Relationship between Condition and Odometer")+
+   theme(axis.text.x = element_text(size = rel(0.8)),
+         plot.title = element_text(size = rel(1)))
+
+```   
+
+ From the above plots, I find that the 'used' cars have the highest mean price. "good" cars have both the highest age and odometer. 
